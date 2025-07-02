@@ -1,0 +1,59 @@
+version: "3.9"
+services:
+  # 1. Geth (Execution Client)
+  execution:
+    image: ethereum/client-go:stable
+    command:
+      - --datadir=/data
+      - --networkid=1234
+      - --http
+      - --http.addr=0.0.0.0
+      - --http.vhosts=*
+      - --http.api=eth,net,web3
+      - --authrpc.addr=0.0.0.0
+      - --authrpc.vhosts=*
+      - --authrpc.jwtsecret=/config/jwt.hex
+    volumes:
+      - ./data/node1:/data
+      - ./config/geth/genesis.json:/config/genesis.json
+      - ./config/jwt.hex:/config/jwt.hex
+    ports:
+      - "8545:8545"
+      - "30303:30303"
+
+  # 2. Lighthouse (Consensus Client - Beacon Node)
+  consensus:
+    image: sigp/lighthouse:latest-unstable
+    user: "${UID:-1000}:${GID:-1000}"
+    command:
+      - lighthouse
+      - beacon_node
+      - --datadir=/data
+      - --testnet-dir=/config
+      - --execution-endpoint=http://execution:8551
+      - --execution-jwt=/config/jwt.hex
+      - --http
+    volumes:
+      - ./lighthouse-data/beacon:/data
+      - ./config/lighthouse:/config
+      - ./config/jwt.hex:/config/jwt.hex
+    ports:
+      - "9000:9000"
+      - "5052:5052"
+    depends_on:
+      - execution
+
+  # 3. Lighthouse (Consensus Client - Validator)
+  validator:
+    image: sigp/lighthouse:latest-unstable
+    user: "${UID:-1000}:${GID:-1000}"
+    command:
+      - lighthouse
+      - validator_client
+      - --datadir=/data
+      - --testnet-dir=/config
+    volumes:
+      - ./lighthouse-data/validator:/data
+      - ./config/lighthouse:/config
+    depends_on:
+      - consensus
